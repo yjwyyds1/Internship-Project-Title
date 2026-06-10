@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Cesium.js"></script>
+    <link
+      href="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+
+    <link href="style.css" rel="stylesheet" />
+
+    <style>
+        #pick3DTileButton {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 100;
+        padding: 10px 20px;
+        font-size: 16px;
+        background-color: #3f51b5;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        }
+
+        #pick3DTileButton:hover {
+        background-color: #303f9f;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="cesiumContainer" class="fullSize"></div>
+    <button id="pick3DTileButton">开启 3D Tile 数据拾取</button>
+    <script>
+      // Get your token from https://cesium.com/ion/tokens
+      Cesium.Ion.defaultAccessToken =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI1Yzg3ZDEzOS0zN2Q1LTQ2N2YtOWJhMy1mNWU4MWY5N2ExYzkiLCJpZCI6MjAxMzIsInNjb3BlcyI6WyJhc3IiLCJnYyJdLCJpYXQiOjE1NzY4MTIzNzR9.SfNeHedDyXWLIPiNbc4qSsHBACm7uvaqRsQprL2J4Cw";
+
+      const viewer = new Cesium.Viewer("cesiumContainer", {
+        //shadows: true,
+      });
+      const tileset = new Cesium.Cesium3DTileset({
+        url: "tileset.json",
+      });
+
+      tileset.readyPromise.then(function (tileset) {
+        viewer.scene.primitives.add(tileset);
+        viewer.zoomTo(
+          tileset,
+          new Cesium.HeadingPitchRange(
+            0.0,
+            -0.5,
+            tileset.boundingSphere.radius * 2.0
+          )
+        );
+      });
+
+      // 获取按钮元素
+        const pickButton = document.getElementById('pick3DTileButton');
+
+        // 当前是否处于拾取状态
+        let isPickingActive = false;
+
+        // 当前选中对象
+        let selectedEntity = null;
+
+        // 拾取功能核心函数
+        function pick3DTileData(movement) {
+            const pickedObject = viewer.scene.pick(movement.position);
+
+            if (pickedObject && pickedObject.node) {
+                const feature = pickedObject.node;
+                console.log('拾取到的 3D Tile 节点:', feature);
+
+                // 高亮当前选中对象
+                if (selectedEntity) {
+                    selectedEntity.polyline.material = Cesium.Color.RED; // 恢复上一个颜色
+                }
+
+                feature.polyline.material = Cesium.Color.YELLOW; // 高亮当前项
+                selectedEntity = feature;
+
+                // 如果有属性信息则弹出提示
+                if (feature.model && feature.model.featureProperties) {
+                    alert(`拾取到的数据属性: ${JSON.stringify(feature.model.featureProperties, null, 2)}`);
+                }
+            }
+        }
+
+        // 按钮点击事件
+        pickButton.addEventListener('click', () => {
+            isPickingActive = !isPickingActive;
+
+            if (isPickingActive) {
+                // 开启拾取模式
+                viewer.canvas.style.cursor = 'crosshair';
+                viewer.scene.screenSpaceCameraController.enableInputs = false;
+
+                // 绑定点击事件
+                viewer.scene.canvas.addEventListener('click', pick3DTileData);
+                console.log('3D Tile 拾取功能已启用');
+            } else {
+                // 关闭拾取模式
+                viewer.canvas.style.cursor = 'default';
+                viewer.scene.screenSpaceCameraController.enableInputs = true;
+
+                // 移除事件监听器
+                viewer.scene.canvas.removeEventListener('click', pick3DTileData);
+                console.log('3D Tile 拾取功能已禁用');
+            }
+        });
+    </script>
+  </body>
+</html>
