@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>实验3：Cesium三维地球添加点云数据</title>
+    <script src="Cesium-1.40/Build/Cesium/Cesium.js"></script>
+    <style>
+        @import url(Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+        html, body, #cesiumContainer {
+            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+        }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); color: white;
+            padding: 10px 15px; border-radius: 5px;
+            font-family: Arial, sans-serif; font-size: 14px; z-index: 100;
+        }
+        #controls {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.7); color: white;
+            padding: 10px 15px; border-radius: 5px;
+            font-family: Arial, sans-serif; font-size: 13px; z-index: 100;
+        }
+        button {
+            padding: 8px 16px; margin: 5px; cursor: pointer;
+            background: #2E75B6; color: white; border: none;
+            border-radius: 4px; font-size: 13px;
+        }
+        button:hover { background: #1a5a96; }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="info">实验3：加载点云数据及添加圆形区域</div>
+    <div id="controls">
+        <button onclick="flyToPointCloud()">飞到点云区域</button>
+        <button onclick="togglePointCloud()">切换点云显示</button>
+        <button onclick="addCircle()">添加圆形标记</button>
+    </div>
+    <script>
+        var viewer = new Cesium.Viewer('cesiumContainer', {
+            imageryProvider: new Cesium.SingleTileImageryProvider({
+                url: 'Cesium-1.40/img/worldimage.jpg'
+            }),
+            homeButton: false,
+            sceneModePicker: false,
+            baseLayerPicker: false,
+            navigationHelpButton: false,
+            animation: false,
+            timeline: false,
+            fullscreenButton: false,
+            vrButton: false
+        });
+
+        var pointsTileset = viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
+            url: 'pwt1/pts/tileset.json'
+        }));
+
+        pointsTileset.readyPromise.then(function() {
+            pointsTileset.style = new Cesium.Cesium3DTileStyle({
+                color: "color('#ff0000')",
+                pointSize: 5.0
+            });
+            flyToPointCloud();
+        });
+
+        function flyToPointCloud() {
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 500.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(145.0),
+                    pitch: Cesium.Math.toRadians(-35.0),
+                    roll: 0.0
+                }
+            });
+        }
+
+        function togglePointCloud() {
+            pointsTileset.show = !pointsTileset.show;
+        }
+
+        var circleEntity = null;
+        function addCircle() {
+            if (circleEntity) {
+                viewer.entities.remove(circleEntity);
+                circleEntity = null;
+                return;
+            }
+            circleEntity = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 100),
+                ellipse: {
+                    semiMinorAxis: 300.0,
+                    semiMajorAxis: 300.0,
+                    material: Cesium.Color.BLUE.withAlpha(1.0)
+                }
+            });
+        }
+    </script>
+</body>
+</html>
