@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>结合Cesium实现基于百度地址编码服务的地址查询、注记及3dtile数据的拾取</title>
+  <script>
+    window.CESIUM_BASE_URL = '见习题目/Cesium-1.40/Build/Cesium/';
+  </script>
+  <script src="见习题目/Cesium-1.40/Build/Cesium/Cesium.js"></script>
+  <style>
+    @import url(见习题目/Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+    #panel {
+      position: absolute; top: 10px; left: 10px; width: 350px;
+      background: rgba(0,0,0,0.8); color: white;
+      padding: 15px; border-radius: 8px;
+      font-family: 'Microsoft YaHei', Arial, sans-serif;
+      font-size: 13px; z-index: 100;
+      max-height: calc(100% - 40px); overflow-y: auto;
+    }
+    #panel h3 {
+      margin: 0 0 10px 0; font-size: 16px; color: #5bc0de;
+      text-align: center; border-bottom: 1px solid #444; padding-bottom: 8px;
+    }
+    #panel label { display: block; margin: 6px 0 3px; color: #ccc; font-size: 12px; }
+    #panel input[type="text"] {
+      width: 100%; padding: 8px; border: 1px solid #555;
+      border-radius: 4px; background: #333; color: white;
+      font-size: 13px; box-sizing: border-box;
+    }
+    #panel button {
+      padding: 8px 16px; margin: 5px 3px; cursor: pointer;
+      background: #2E75B6; color: white; border: none;
+      border-radius: 4px; font-size: 13px;
+    }
+    #panel button:hover { background: #1a5a96; }
+    #panel button.active { background: #d9534f; }
+    #result {
+      margin-top: 10px; padding: 8px; background: #222;
+      border-radius: 4px; font-size: 12px; max-height: 200px; overflow-y: auto;
+      word-break: break-all;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 5px; }
+    .btn-group button { flex: 1; min-width: 80px; }
+    #coord {
+      position: absolute; bottom: 10px; right: 10px;
+      background: rgba(0,0,0,0.7); color: #ccc;
+      padding: 5px 10px; border-radius: 4px;
+      font-family: monospace; font-size: 12px; z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="panel">
+    <h3>地址查询与3DTile拾取系统</h3>
+    <label>百度地图AK密钥:
+      <input type="text" id="akInput" value="PpXRPg7RdlHVWxzJTLQAE5g7EJSYFPpj" placeholder="输入百度地图AK">
+    </label>
+    <label>输入地址:
+      <input type="text" id="addressInput" placeholder="例如: 北京市天安门" value="湖北省黄冈市黄冈师范学院">
+    </label>
+    <div class="btn-group">
+      <button onclick="searchAddress()">地址查询</button>
+      <button onclick="addAnnotation()">添加注记</button>
+      <button onclick="clearAnnotations()">清除注记</button>
+    </div>
+
+    <hr style="border-color: #444; margin: 10px 0;">
+
+    <div class="btn-group">
+      <button id="btn3dTile" onclick="toggle3DTiles()">加载3DTile数据</button>
+      <button id="btnPick" onclick="togglePick()">启动拾取</button>
+      <button onclick="clearSelection()">清除高亮</button>
+    </div>
+
+    <div id="result">就绪，请输入地址进行查询。</div>
+  </div>
+
+  <div id="coord"></div>
+
+  <script>
+    // ============ 1. 初始化 Cesium Viewer ============
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+        url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+      }),
+      geocoder: false, homeButton: false, sceneModePicker: false,
+      baseLayerPicker: false, navigationHelpButton: false,
+      animation: false, timeline: false,
+      fullscreenButton: false, vrButton: false
+    });
+
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(114.9, 30.5, 5000000)
+    });
+
+    // 回车键快捷查询
+    document.getElementById('addressInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') searchAddress();
+    });
+
+    // ============ 2. 全局状态变量 ============
+    var currentPosition = null;
+    var annotationEntities = [];
+    var dtilesetLoaded = false;
+    var dtileset = null;
+    var pickEnabled = false;
+    var highlighted = null;
+
+    var handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+    // 实时显示相机位置
+    viewer.camera.moveEnd.addEventListener(function () {
+      var pos = viewer.camera.positionCartographic;
+      var lon = Cesium.Math.toDegrees(pos.longitude).toFixed(6);
+      var lat = Cesium.Math.toDegrees(pos.latitude).toFixed(6);
+      document.getElementById('coord').textContent =
+        '经度: ' + lon + ' | 纬度: ' + lat + ' | 高度: ' + (pos.height / 1000).toFixed(2) + ' km';
+    });
+
+    // ============ 3. 百度地图地址编码 ============
+    function searchAddress() {
+      var address = document.getElementById('addressInput').value.trim();
+      var ak = document.getElementById('akInput').value.trim();
+
+      if (!address) { alert('请输入地址'); return; }
+      if (!ak) { alert('请输入百度地图AK密钥'); return; }
+
+      document.getElementById('result').innerHTML =
+        '<span style="color:#5bc0de;">正在查询: ' + address + '...</span>';
+
+      var url = 'https://api.map.baidu.com/geocoding/v3/?address=' +
+        encodeURIComponent(address) + '&output=json&ak=' + ak + '&callback=handleBaiduResponse';
+
+      jsonpRequest(url);
+    }
+
+    function jsonpRequest(url) {
+      var callbackName = 'handleBaiduResponse';
+      window[callbackName] = function (data) {
+        if (data.status === 0) {
+          var lng = data.result.location.lng;
+          var lat = data.result.location.lat;
+          currentPosition = { lng: lng, lat: lat };
+
+          document.getElementById('result').innerHTML =
+            '<div style="color:#5cb85c;">查询成功!</div>' +
+            '<div>地址: ' + (data.result.precise === 1 ? '精确匹配' : '模糊匹配') + '</div>' +
+            '<div>经度: ' + lng + '</div>' +
+            '<div>纬度: ' + lat + '</div>' +
+            '<div>可信度: ' + data.result.confidence + '级</div>';
+
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lng, lat, 1500),
+            duration: 3
+          });
+
+          addAnnotation();
+        } else {
+          document.getElementById('result').innerHTML =
+            '<div style="color:#d9534f;">查询失败: ' + (data.message || '未知错误') + '</div>';
+        }
+        delete window[callbackName];
+        var scripts = document.querySelectorAll('script[data-jsonp]');
+        scripts.forEach(function (s) { s.remove(); });
+      };
+
+      var script = document.createElement('script');
+      script.src = url;
+      script.setAttribute('data-jsonp', 'true');
+      script.onerror = function () {
+        document.getElementById('result').innerHTML =
+          '<div style="color:#d9534f;">网络请求失败，请检查AK是否正确或网络是否可访问百度地图API</div>';
+        delete window['handleBaiduResponse'];
+        script.remove();
+      };
+      document.body.appendChild(script);
+    }
+
+    // ============ 4. 注记标注 ============
+    function addAnnotation() {
+      if (!currentPosition) {
+        alert('请先进行地址查询');
+        return;
+      }
+
+      var address = document.getElementById('addressInput').value.trim() || '查询位置';
+      var entity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(currentPosition.lng, currentPosition.lat),
+        point: {
+          pixelSize: 12,
+          color: Cesium.Color.CYAN,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2
+        },
+        label: {
+          text: address,
+          font: '16px Microsoft YaHei, sans-serif',
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          outlineWidth: 2,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -15),
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          backgroundColor: Cesium.Color.fromCssColorString('#2E75B6').withAlpha(0.8),
+          backgroundPadding: new Cesium.Cartesian2(8, 4),
+          showBackground: true
+        }
+      });
+
+      annotationEntities.push(entity);
+    }
+
+    function clearAnnotations() {
+      annotationEntities.forEach(function (e) { viewer.entities.remove(e); });
+      annotationEntities = [];
+      currentPosition = null;
+      document.getElementById('result').innerHTML = '注记已清除。';
+    }
+
+    // ============ 5. 3DTile 数据加载 ============
+    function toggle3DTiles() {
+      var btn = document.getElementById('btn3dTile');
+      if (dtilesetLoaded) {
+        dtileset.show = !dtileset.show;
+        btn.textContent = dtileset.show ? '隐藏3DTile数据' : '加载3DTile数据';
+        btn.classList.toggle('active', !dtileset.show);
+        return;
+      }
+
+      btn.textContent = '加载中...';
+      btn.disabled = true;
+
+      dtileset = viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
+        url: '见习题目/3dtilesDemo/3dtilesDemo/tileset.json'
+      }));
+
+      dtileset.readyPromise.then(function () {
+        dtilesetLoaded = true;
+        btn.textContent = '隐藏3DTile数据';
+        btn.disabled = false;
+        btn.classList.remove('active');
+        viewer.zoomTo(dtileset);
+        document.getElementById('result').innerHTML +=
+          '<div style="color:#5cb85c;">3DTile数据加载成功，共 ' + dtileset.tilesLoaded + ' 个图块</div>';
+      }).otherwise(function (error) {
+        btn.textContent = '加载失败';
+        btn.disabled = false;
+        document.getElementById('result').innerHTML +=
+          '<div style="color:#d9534f;">3DTile数据加载失败: ' + error + '</div>';
+      });
+    }
+
+    // ============ 6. 拾取功能 ============
+    function togglePick() {
+      pickEnabled = !pickEnabled;
+      var btn = document.getElementById('btnPick');
+      btn.textContent = pickEnabled ? '关闭拾取' : '启动拾取';
+      btn.classList.toggle('active', pickEnabled);
+
+      if (!pickEnabled) {
+        clearSelection();
+      } else {
+        document.getElementById('result').innerHTML +=
+          '<div style="color:#5bc0de;">拾取模式已启动，点击3DTile模型查看属性</div>';
+      }
+    }
+
+    function clearSelection() {
+      if (highlighted) {
+        highlighted.color = Cesium.Color.clone(highlighted._originalColor || Cesium.Color.WHITE);
+        highlighted = null;
+      }
+    }
+
+    handler.setInputAction(function (movement) {
+      if (!pickEnabled || !dtilesetLoaded) return;
+
+      var picked = viewer.scene.pick(movement.position);
+      if (Cesium.defined(picked) && Cesium.defined(picked.primitive) && picked.primitive === dtileset) {
+        clearSelection();
+
+        // 高亮选中模型
+        if (Cesium.defined(picked.color)) {
+          if (!picked._originalColor) {
+            picked._originalColor = Cesium.Color.clone(picked.color);
+          }
+        }
+        picked.color = Cesium.Color.YELLOW;
+        highlighted = picked;
+
+        var info = '<div style="color:#f0ad4e;">模型拾取成功!</div>';
+        info += '<div>已加载图块: ' + dtileset.tilesLoaded + '</div>';
+
+        // 读取 batchTable 属性（如地址、负责人等）
+        if (Cesium.defined(picked.content)) {
+          var batchTable = picked.content.batchTable;
+          if (Cesium.defined(batchTable)) {
+            var batchLength = batchTable._batchLength || 0;
+            info += '<div>批次大小: ' + batchLength + '</div>';
+
+            // 遍历 batchTable 的所有 key 显示属性
+            var keys = Object.keys(batchTable).filter(function (k) { return k[0] !== '_'; });
+            if (keys.length > 0) {
+              info += '<div style="margin-top:4px;"><b>模型属性:</b></div>';
+              keys.forEach(function (k) {
+                try {
+                  var val = JSON.stringify(batchTable[k]);
+                  if (val.length > 120) val = val.substring(0, 120) + '...';
+                  info += '<div>  ' + k + ': ' + val + '</div>';
+                } catch (e) { }
+              });
+            }
+          }
+        }
+
+        // 读取 featureTableJson
+        if (Cesium.defined(picked.content) && Cesium.defined(picked.content.featureTableJson)) {
+          var ftJson = picked.content.featureTableJson;
+          info += '<div>特征表(BATCH_LENGTH): ' + (ftJson.BATCH_LENGTH || 'N/A') + '</div>';
+        }
+
+        document.getElementById('result').innerHTML = info;
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  </script>
+</body>
+</html>
