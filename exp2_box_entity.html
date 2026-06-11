@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>实验1：Cesium三维场景中添加立方体要素</title>
+  <script src="见习题目/Cesium-1.40/Build/Cesium/Cesium.js"></script>
+  <style>
+    @import url(见习题目/Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+
+    /* 控制面板样式 */
+    #controlPanel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      z-index: 10;
+      min-width: 180px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #controlPanel h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #4fc3f7;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 8px;
+    }
+    #controlPanel button {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 9px 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: #fff;
+      transition: background 0.2s;
+    }
+    .btn-add    { background: #e53935; }
+    .btn-add:hover    { background: #c62828; }
+    .btn-fly    { background: #1e88e5; }
+    .btn-fly:hover    { background: #1565c0; }
+    .btn-remove { background: #7cb342; }
+    .btn-remove:hover { background: #558b2f; }
+    .btn-add-ellipse { background: #fb8c00; }
+    .btn-add-ellipse:hover { background: #ef6c00; }
+
+    #statusText {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #bdbdbd;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="controlPanel">
+    <h3>实验1：立方体要素控制</h3>
+    <button class="btn-add" onclick="addRedBox()">添加红色立方体</button>
+    <button class="btn-fly" onclick="flyToBox()">飞入立方体位置</button>
+    <button class="btn-remove" onclick="removeBox()">移除立方体</button>
+    <button class="btn-add-ellipse" onclick="addEllipse()">添加椭圆实体</button>
+    <div id="statusText">就绪</div>
+  </div>
+
+  <script>
+    // ============ 1. 初始化 Viewer ============
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+        url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+      }),
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      baseLayerPicker: false,
+      navigationHelpButton: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+      vrButton: false
+    });
+
+    viewer.scene.debugShowFramesPerSecond = true;
+
+    // 初始视角：美国西部上空，便于看到立方体
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(-107.0, 40.0, 2000000)
+    });
+
+    // ============ 2. 实体操作变量 ============
+    var redBox = null;
+
+    function updateStatus(msg) {
+      document.getElementById('statusText').textContent = msg;
+    }
+
+    // ============ 3. 添加红色立方体 ============
+    function addRedBox() {
+      if (redBox && !redBox.isDestroyed()) {
+        updateStatus('立方体已存在，先移除再添加吧');
+        return;
+      }
+      redBox = viewer.entities.add({
+        name: 'Red box with black outline',
+        position: Cesium.Cartesian3.fromDegrees(-107.0, 40.0, 300000.0),
+        box: {
+          dimensions: new Cesium.Cartesian3(400000.0, 300000.0, 500000.0),
+          material: Cesium.Color.RED.withAlpha(0.5),
+          outline: true,
+          outlineColor: Cesium.Color.BLACK
+        }
+      });
+      updateStatus('已添加红色立方体（经度-107°, 纬度40°, 高度300km）');
+    }
+
+    // ============ 4. 飞入立方体位置 ============
+    function flyToBox() {
+      if (!redBox || redBox.isDestroyed()) {
+        updateStatus('请先添加立方体');
+        return;
+      }
+      viewer.flyTo(redBox, {
+        duration: 2,
+        offset: new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(0),    // heading
+          Cesium.Math.toRadians(-30),  // pitch（俯视30度）
+          1500000                      // range（距离1,500km）
+        )
+      });
+      updateStatus('正在飞入立方体位置...');
+    }
+
+    // ============ 5. 移除立方体 ============
+    function removeBox() {
+      if (!redBox || redBox.isDestroyed()) {
+        updateStatus('没有可移除的立方体');
+        return;
+      }
+      viewer.entities.remove(redBox);
+      redBox = null;
+      updateStatus('已移除立方体');
+    }
+
+    // ============ 6. 添加椭圆实体（扩展演示） ============
+    function addEllipse() {
+      var ellipse = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(-103.0, 40.0),
+        ellipse: {
+          semiMinorAxis: 250000.0,
+          semiMajorAxis: 400000.0
+        }
+      });
+      ellipse.ellipse.material = new Cesium.GridMaterialProperty({
+        color: Cesium.Color.YELLOW,
+        cellAlpha: 0.2,
+        lineCount: new Cesium.Cartesian2(8, 8),
+        lineThickness: new Cesium.Cartesian2(2.0, 2.0)
+      });
+      updateStatus('已添加网格椭圆实体');
+    }
+
+    // ============ 7. 初始自动添加立方体 ============
+    addRedBox();
+    viewer.zoomTo(viewer.entities);
+
+    console.log('实验1——立方体要素添加页面初始化成功！');
+  </script>
+</body>
+</html>

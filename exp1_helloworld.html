@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>实验1：构建Cesium三维地球场景</title>
+  <script src="见习题目/Cesium-1.40/Build/Cesium/Cesium.js"></script>
+  <style>
+    @import url(见习题目/Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="info">Cesium 三维地球场景 | 实验1</div>
+
+  <script>
+    // 初始化 Cesium Viewer，使用 ArcGIS 卫星影像底图（无需 Ion Token）
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+      // 使用 ArcGIS 全球卫星影像作为底图
+      imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+        url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+      }),
+      // 禁用默认 UI 控件，简化界面
+      geocoder: false,              // 地址搜索
+      homeButton: false,             // 主页按钮
+      sceneModePicker: false,        // 场景模式（2D/2.5D/3D）切换
+      baseLayerPicker: false,        // 底图选择器
+      navigationHelpButton: false,   // 导航帮助按钮
+      animation: false,              // 动画控件
+      timeline: false,               // 时间轴
+      fullscreenButton: false,       // 全屏按钮
+      vrButton: false                // VR 按钮
+    });
+
+    // 开启帧率显示
+    viewer.scene.debugShowFramesPerSecond = true;
+
+    // 将相机飞到中国区域上空（经度114.9，纬度30.5，高度5000km）
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(114.9, 30.5, 5000000)
+    });
+
+    // 输出当前信息到控制台，方便调试
+    console.log('Cesium 三维地球场景初始化成功！');
+    console.log('Cesium 版本：' + Cesium.VERSION);
+  </script>
+</body>
+</html>
