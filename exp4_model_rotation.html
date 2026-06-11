@@ -126,24 +126,15 @@
     var anglex = 0, angley = 0, anglez = 0;
 
     tileset.readyPromise.then(function () {
-      // 保存原始矩阵
       originalMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
-
-      // 相机飞入模型位置
       viewer.zoomTo(tileset);
-
-      console.log('3DTiles 模型加载成功！');
-      updateStatus('模型加载完成');
+      updateAngles();
+      console.log('3DTiles 模型加载成功！modelMatrix:', originalMatrix);
     }).otherwise(function (error) {
       console.error('模型加载失败：', error);
-      updateStatus('模型加载失败，请检查路径');
     });
 
     // ============ 3. 旋转函数 ============
-    function updateStatus(msg) {
-      // 状态在角度面板中体现
-    }
-
     function updateAngles() {
       document.getElementById('ax').textContent = anglex;
       document.getElementById('ay').textContent = angley;
@@ -151,21 +142,36 @@
     }
 
     function applyRotation() {
-      if (!originalMatrix) return;
+      if (!originalMatrix) {
+        console.warn('模型尚未加载完成，originalMatrix 为空');
+        return;
+      }
+      if (!tileset || tileset.isDestroyed()) {
+        console.warn('tileset 不存在或已销毁');
+        return;
+      }
+      try {
+        var rx = Cesium.Math.toRadians(anglex);
+        var ry = Cesium.Math.toRadians(angley);
+        var rz = Cesium.Math.toRadians(anglez);
 
-      // 先绕 Z 轴 → 再绕 Y 轴 → 再绕 X 轴（外旋 ZYX 顺序）
-      var rotX = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(anglex));
-      var rotY = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(angley));
-      var rotZ = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(anglez));
+        // 构建完整的 4x4 旋转矩阵（绕 X → Y → Z）
+        var rotMatrix = Cesium.Matrix4.fromRotationTranslation(
+          Cesium.Quaternion.fromHeadingPitchRoll(
+            new Cesium.HeadingPitchRoll(rz, rx, ry)  // heading=rz, pitch=rx, roll=ry
+          ),
+          Cesium.Cartesian3.ZERO
+        );
 
-      var rotMat = new Cesium.Matrix3();
-      Cesium.Matrix3.multiply(rotZ, rotY, rotMat);
-      Cesium.Matrix3.multiply(rotMat, rotX, rotMat);
+        // 将旋转应用到原始矩阵
+        tileset.modelMatrix = Cesium.Matrix4.multiply(
+          originalMatrix, rotMatrix, new Cesium.Matrix4()
+        );
 
-      tileset.modelMatrix = Cesium.Matrix4.multiplyByMatrix3(
-        originalMatrix, rotMat, new Cesium.Matrix4()
-      );
-      updateAngles();
+        updateAngles();
+      } catch (e) {
+        console.error('旋转出错：', e);
+      }
     }
 
     // 绕 X 轴旋转 1°
