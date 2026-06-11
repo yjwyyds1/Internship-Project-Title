@@ -87,54 +87,33 @@
     var anglex = 0, angley = 0, anglez = 0;
 
     tileset.readyPromise.then(function () {
-      // 获取模型中心点位置（用于绕模型自身中心旋转）
-      var bs = tileset.boundingSphere;
-      var center = bs ? bs.center : Cesium.Cartesian3.ZERO;
-
-      // 保存原始 modelMatrix
       originalMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
-
       viewer.zoomTo(tileset);
-      document.getElementById('ax').textContent = '0';
-      document.getElementById('ay').textContent = '0';
-      document.getElementById('az').textContent = '0';
-      console.log('模型加载成功，center=', center);
+      updateAngles();
+      console.log('模型加载成功');
     }).otherwise(function (err) {
       console.error('模型加载失败', err);
     });
 
     // ---- 旋转 ----
-    function applyRotation() {
-      if (!originalMatrix) return;
-
-      // 平移→单位矩阵→旋转→平移回去
-      var translate = Cesium.Matrix4.getTranslation(originalMatrix, new Cesium.Cartesian3());
-
-      // 从单位矩阵开始，累积绕各轴旋转
-      var rot4 = Cesium.Matrix4.fromRotationTranslation(
-        Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(anglex))
-      );
-
-      // 绕 Y
-      var rotY4 = Cesium.Matrix4.fromRotationTranslation(
-        Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(angley))
-      );
-      Cesium.Matrix4.multiply(rot4, rotY4, rot4);
-
-      // 绕 Z
-      var rotZ4 = Cesium.Matrix4.fromRotationTranslation(
-        Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(anglez))
-      );
-      Cesium.Matrix4.multiply(rot4, rotZ4, rot4);
-
-      // 把平移塞回去
-      Cesium.Matrix4.setTranslation(rot4, translate);
-
-      tileset.modelMatrix = rot4;
-
+    function updateAngles() {
       document.getElementById('ax').textContent = anglex;
       document.getElementById('ay').textContent = angley;
       document.getElementById('az').textContent = anglez;
+    }
+
+    function applyRotation() {
+      if (!originalMatrix) return;
+      var hpr = new Cesium.HeadingPitchRoll(
+        Cesium.Math.toRadians(anglez),
+        Cesium.Math.toRadians(anglex),
+        Cesium.Math.toRadians(angley)
+      );
+      var rot = Cesium.Matrix4.fromRotationTranslation(
+        Cesium.Matrix3.fromHeadingPitchRoll(hpr)
+      );
+      tileset.modelMatrix = Cesium.Matrix4.multiply(originalMatrix, rot, new Cesium.Matrix4());
+      updateAngles();
     }
 
     function rotateX() { anglex += 1; applyRotation(); }
