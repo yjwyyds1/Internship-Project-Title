@@ -14,64 +14,35 @@
     html, body, #cesiumContainer {
       width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
     }
-
     #controlPanel {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      padding: 16px 20px;
-      border-radius: 8px;
-      font-family: "Microsoft YaHei", sans-serif;
-      font-size: 13px;
-      z-index: 10;
-      min-width: 200px;
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(0,0,0,0.75); color: #fff;
+      padding: 16px 20px; border-radius: 8px;
+      font-family: "Microsoft YaHei", sans-serif; font-size: 13px;
+      z-index: 10; min-width: 200px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     #controlPanel h3 {
-      margin: 0 0 12px 0;
-      font-size: 16px;
-      color: #4fc3f7;
-      border-bottom: 1px solid rgba(255,255,255,0.2);
-      padding-bottom: 8px;
+      margin: 0 0 12px 0; font-size: 16px; color: #4fc3f7;
+      border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;
     }
     #controlPanel button {
-      display: block;
-      width: 100%;
-      margin-bottom: 8px;
-      padding: 9px 0;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: "Microsoft YaHei", sans-serif;
-      font-size: 13px;
-      color: #fff;
-      transition: background 0.2s;
+      display: block; width: 100%; margin-bottom: 8px; padding: 9px 0;
+      border: none; border-radius: 4px; cursor: pointer;
+      font-family: "Microsoft YaHei", sans-serif; font-size: 13px;
+      color: #fff; transition: background 0.2s;
     }
-    .btn-x      { background: #e53935; }
-    .btn-x:hover      { background: #c62828; }
-    .btn-y      { background: #43a047; }
-    .btn-y:hover      { background: #2e7d32; }
-    .btn-z      { background: #1e88e5; }
-    .btn-z:hover      { background: #1565c0; }
-    .btn-reset  { background: #8e24aa; }
-    .btn-reset:hover  { background: #6a1b9a; }
-    .btn-fly    { background: #fb8c00; }
-    .btn-fly:hover    { background: #ef6c00; }
-    .btn-toggle { background: #00acc1; }
-    .btn-toggle:hover { background: #00838f; }
-
+    .btn-x      { background:#e53935; } .btn-x:hover      { background:#c62828; }
+    .btn-y      { background:#43a047; } .btn-y:hover      { background:#2e7d32; }
+    .btn-z      { background:#1e88e5; } .btn-z:hover      { background:#1565c0; }
+    .btn-reset  { background:#8e24aa; } .btn-reset:hover  { background:#6a1b9a; }
+    .btn-fly    { background:#fb8c00; } .btn-fly:hover    { background:#ef6c00; }
+    .btn-toggle { background:#00acc1; } .btn-toggle:hover { background:#00838f; }
     #angleInfo {
-      margin-top: 10px;
-      padding: 8px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 4px;
-      font-size: 12px;
-      line-height: 1.8;
-      color: #e0e0e0;
+      margin-top:10px; padding:8px; background:rgba(255,255,255,0.1);
+      border-radius:4px; font-size:12px; line-height:1.8; color:#e0e0e0;
     }
-    #angleInfo span { color: #4fc3f7; font-weight: bold; }
+    #angleInfo span { color:#4fc3f7; font-weight:bold; }
   </style>
 </head>
 <body>
@@ -93,127 +64,97 @@
   </div>
 
   <script>
-    // ============ 1. 初始化 Viewer ============
     var viewer = new Cesium.Viewer('cesiumContainer', {
       imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
         url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
       }),
-      homeButton: false,
-      sceneModePicker: false,
-      baseLayerPicker: false,
-      navigationHelpButton: false,
-      animation: false,
-      timeline: false,
-      fullscreenButton: false,
-      vrButton: false
+      homeButton: false, sceneModePicker: false, baseLayerPicker: false,
+      navigationHelpButton: false, animation: false, timeline: false,
+      fullscreenButton: false, vrButton: false
     });
 
     viewer.scene.debugShowFramesPerSecond = true;
-
-    // 初始相机位置
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(114.9, 30.5, 5000000)
     });
 
-    // ============ 2. 加载 3DTiles 模型 ============
+    // 加载模型
     var tileset = viewer.scene.primitives.add(
-      new Cesium.Cesium3DTileset({
-        url: '见习题目/Tileset/tileset.json'
-      })
+      new Cesium.Cesium3DTileset({ url: '见习题目/Tileset/tileset.json' })
     );
 
-    var originalMatrix = null;   // 保存初始模型矩阵
+    var originalMatrix = null;
     var anglex = 0, angley = 0, anglez = 0;
 
     tileset.readyPromise.then(function () {
+      // 获取模型中心点位置（用于绕模型自身中心旋转）
+      var bs = tileset.boundingSphere;
+      var center = bs ? bs.center : Cesium.Cartesian3.ZERO;
+
+      // 保存原始 modelMatrix
       originalMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
+
       viewer.zoomTo(tileset);
-      updateAngles();
-      console.log('3DTiles 模型加载成功！modelMatrix:', originalMatrix);
-    }).otherwise(function (error) {
-      console.error('模型加载失败：', error);
+      document.getElementById('ax').textContent = '0';
+      document.getElementById('ay').textContent = '0';
+      document.getElementById('az').textContent = '0';
+      console.log('模型加载成功，center=', center);
+    }).otherwise(function (err) {
+      console.error('模型加载失败', err);
     });
 
-    // ============ 3. 旋转函数 ============
-    function updateAngles() {
+    // ---- 旋转 ----
+    function applyRotation() {
+      if (!originalMatrix) return;
+
+      // 平移→单位矩阵→旋转→平移回去
+      var translate = Cesium.Matrix4.getTranslation(originalMatrix, new Cesium.Cartesian3());
+
+      // 从单位矩阵开始，累积绕各轴旋转
+      var rot4 = Cesium.Matrix4.fromRotationTranslation(
+        Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(anglex))
+      );
+
+      // 绕 Y
+      var rotY4 = Cesium.Matrix4.fromRotationTranslation(
+        Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(angley))
+      );
+      Cesium.Matrix4.multiply(rot4, rotY4, rot4);
+
+      // 绕 Z
+      var rotZ4 = Cesium.Matrix4.fromRotationTranslation(
+        Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(anglez))
+      );
+      Cesium.Matrix4.multiply(rot4, rotZ4, rot4);
+
+      // 把平移塞回去
+      Cesium.Matrix4.setTranslation(rot4, translate);
+
+      tileset.modelMatrix = rot4;
+
       document.getElementById('ax').textContent = anglex;
       document.getElementById('ay').textContent = angley;
       document.getElementById('az').textContent = anglez;
     }
 
-    function applyRotation() {
-      if (!originalMatrix) {
-        console.warn('模型尚未加载完成，originalMatrix 为空');
-        return;
-      }
-      if (!tileset || tileset.isDestroyed()) {
-        console.warn('tileset 不存在或已销毁');
-        return;
-      }
-      try {
-        var rx = Cesium.Math.toRadians(anglex);
-        var ry = Cesium.Math.toRadians(angley);
-        var rz = Cesium.Math.toRadians(anglez);
+    function rotateX() { anglex += 1; applyRotation(); }
+    function rotateY() { angley += 1; applyRotation(); }
+    function rotateZ() { anglez += 1; applyRotation(); }
 
-        // 构建完整的 4x4 旋转矩阵（绕 X → Y → Z）
-        var rotMatrix = Cesium.Matrix4.fromRotationTranslation(
-          Cesium.Quaternion.fromHeadingPitchRoll(
-            new Cesium.HeadingPitchRoll(rz, rx, ry)  // heading=rz, pitch=rx, roll=ry
-          ),
-          Cesium.Cartesian3.ZERO
-        );
-
-        // 将旋转应用到原始矩阵
-        tileset.modelMatrix = Cesium.Matrix4.multiply(
-          originalMatrix, rotMatrix, new Cesium.Matrix4()
-        );
-
-        updateAngles();
-      } catch (e) {
-        console.error('旋转出错：', e);
-      }
-    }
-
-    // 绕 X 轴旋转 1°
-    function rotateX() {
-      anglex += 1;
-      applyRotation();
-    }
-
-    // 绕 Y 轴旋转 1°
-    function rotateY() {
-      angley += 1;
-      applyRotation();
-    }
-
-    // 绕 Z 轴旋转 1°
-    function rotateZ() {
-      anglez += 1;
-      applyRotation();
-    }
-
-    // 重置旋转
     function resetRotation() {
-      anglex = 0;
-      angley = 0;
-      anglez = 0;
+      anglex = 0; angley = 0; anglez = 0;
       if (originalMatrix) {
         tileset.modelMatrix = Cesium.Matrix4.clone(originalMatrix);
       }
-      updateAngles();
+      document.getElementById('ax').textContent = '0';
+      document.getElementById('ay').textContent = '0';
+      document.getElementById('az').textContent = '0';
     }
 
-    // 飞入模型位置
-    function flyToModel() {
-      viewer.zoomTo(tileset);
-    }
+    function flyToModel() { viewer.zoomTo(tileset); }
+    function toggleModel() { tileset.show = !tileset.show; }
 
-    // 切换模型显隐
-    function toggleModel() {
-      tileset.show = !tileset.show;
-    }
-
-    console.log('实验2——3DTiles 模型旋转页面初始化完成！');
+    console.log('页面初始化完成');
   </script>
 </body>
 </html>
