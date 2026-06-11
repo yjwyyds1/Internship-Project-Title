@@ -26,7 +26,7 @@ var MIME = {
 };
 
 var server = http.createServer(function (req, res) {
-  var filePath = path.join(ROOT, req.url.split('?')[0]);
+  var filePath = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   if (filePath.endsWith('/')) filePath = path.join(filePath, 'index.html');
 
   var ext = path.extname(filePath).toLowerCase();

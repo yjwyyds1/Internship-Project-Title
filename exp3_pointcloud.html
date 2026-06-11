@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>实验2：加载点云数据及添加圆形区域</title>
+  <script>
+    window.CESIUM_BASE_URL = '见习题目/Cesium-1.40/Build/Cesium/';
+  </script>
+  <script src="见习题目/Cesium-1.40/Build/Cesium/Cesium.js"></script>
+  <style>
+    @import url(见习题目/Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+
+    #controlPanel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      z-index: 10;
+      min-width: 200px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #controlPanel h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #4fc3f7;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 8px;
+    }
+    #controlPanel button {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 9px 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: #fff;
+      transition: background 0.2s;
+    }
+    .btn-fly     { background: #1e88e5; }
+    .btn-fly:hover     { background: #1565c0; }
+    .btn-toggle  { background: #7cb342; }
+    .btn-toggle:hover  { background: #558b2f; }
+    .btn-circle  { background: #fb8c00; }
+    .btn-circle:hover  { background: #ef6c00; }
+    .btn-reset   { background: #8e24aa; }
+    .btn-reset:hover   { background: #6a1b9a; }
+
+    #statusText {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #bdbdbd;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="controlPanel">
+    <h3>实验2：点云 & 圆形区域</h3>
+    <button class="btn-fly"     onclick="flyToCloud()">飞入点云区域</button>
+    <button class="btn-toggle"  onclick="toggleCloud()">切换点云显隐</button>
+    <button class="btn-circle"  onclick="addCircle()">添加圆形标记</button>
+    <button class="btn-reset"   onclick="resetView()">重置视角</button>
+    <div id="statusText">加载中...</div>
+  </div>
+
+  <script>
+    // ============ 1. 初始化 Viewer（单张图片底图） ============
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.SingleTileImageryProvider({
+        url: '见习题目/Cesium-1.40/img/worldimage.jpg'
+      }),
+      homeButton: false,
+      sceneModePicker: false,
+      baseLayerPicker: false,
+      navigationHelpButton: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+      vrButton: false
+    });
+
+    viewer.scene.debugShowFramesPerSecond = true;
+
+    function updateStatus(msg) {
+      document.getElementById('statusText').textContent = msg;
+    }
+
+    // ============ 2. 加载点云 3D Tiles 数据 ============
+    var pointsTileset = viewer.scene.primitives.add(
+      new Cesium.Cesium3DTileset({
+        url: '见习题目/pwt1/pts/tileset.json'
+      })
+    );
+
+    pointsTileset.readyPromise.then(function () {
+      updateStatus('点云数据加载完成');
+
+      // 设置点云样式：红色，点大小 5.0
+      pointsTileset.style = new Cesium.Cesium3DTileStyle({
+        color: "color('#ff0000')",
+        pointSize: 5.0
+      });
+
+      // 相机飞行到点云区域（广东佛山）
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 500.0),
+        orientation: {
+          heading: Cesium.Math.toRadians(145.0),
+          pitch: Cesium.Math.toRadians(-35.0),
+          roll: 0.0
+        },
+        duration: 2
+      });
+
+      console.log('点云数据加载成功！瓦片数量：通过 tileset 加载');
+    }).otherwise(function (error) {
+      updateStatus('点云加载失败，请检查数据路径');
+      console.error('点云加载失败：', error);
+    });
+
+    // ============ 3. 交互功能 ============
+    var circles = [];
+
+    // 飞入点云区域
+    function flyToCloud() {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 500.0),
+        orientation: {
+          heading: Cesium.Math.toRadians(145.0),
+          pitch: Cesium.Math.toRadians(-35.0),
+          roll: 0.0
+        },
+        duration: 2
+      });
+      updateStatus('正在飞入点云区域...');
+    }
+
+    // 切换点云显隐
+    function toggleCloud() {
+      pointsTileset.show = !pointsTileset.show;
+      updateStatus('点云：' + (pointsTileset.show ? '显示' : '隐藏'));
+    }
+
+    // 添加蓝色圆形标记
+    function addCircle() {
+      var circle = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 100),
+        ellipse: {
+          semiMinorAxis: 300.0,
+          semiMajorAxis: 300.0,
+          material: Cesium.Color.BLUE.withAlpha(1.0)
+        }
+      });
+      circles.push(circle);
+      updateStatus('已添加圆形标记（共 ' + circles.length + ' 个）');
+    }
+
+    // 重置视角
+    function resetView() {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(112.82536, 23.071506, 1000.0),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-45.0),
+          roll: 0.0
+        },
+        duration: 2
+      });
+
+      // 清除所有圆形
+      circles.forEach(function (c) { viewer.entities.remove(c); });
+      circles = [];
+      updateStatus('视角已重置，圆形已清除');
+    }
+
+    console.log('实验2——点云数据加载页面初始化完成！');
+  </script>
+</body>
+</html>

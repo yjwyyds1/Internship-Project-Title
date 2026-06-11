@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>实验2：加载3DTiles模型并实现旋转交互</title>
+  <script>
+    window.CESIUM_BASE_URL = '见习题目/Cesium-1.40/Build/Cesium/';
+  </script>
+  <script src="见习题目/Cesium-1.40/Build/Cesium/Cesium.js"></script>
+  <style>
+    @import url(见习题目/Cesium-1.40/Build/Cesium/Widgets/widgets.css);
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+
+    #controlPanel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      z-index: 10;
+      min-width: 200px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #controlPanel h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #4fc3f7;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 8px;
+    }
+    #controlPanel button {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 9px 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: #fff;
+      transition: background 0.2s;
+    }
+    .btn-x      { background: #e53935; }
+    .btn-x:hover      { background: #c62828; }
+    .btn-y      { background: #43a047; }
+    .btn-y:hover      { background: #2e7d32; }
+    .btn-z      { background: #1e88e5; }
+    .btn-z:hover      { background: #1565c0; }
+    .btn-reset  { background: #8e24aa; }
+    .btn-reset:hover  { background: #6a1b9a; }
+    .btn-fly    { background: #fb8c00; }
+    .btn-fly:hover    { background: #ef6c00; }
+    .btn-toggle { background: #00acc1; }
+    .btn-toggle:hover { background: #00838f; }
+
+    #angleInfo {
+      margin-top: 10px;
+      padding: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1.8;
+      color: #e0e0e0;
+    }
+    #angleInfo span { color: #4fc3f7; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="controlPanel">
+    <h3>实验2：3DTiles 模型旋转</h3>
+    <button class="btn-x"     onclick="rotateX()">绕 X 轴旋转</button>
+    <button class="btn-y"     onclick="rotateY()">绕 Y 轴旋转</button>
+    <button class="btn-z"     onclick="rotateZ()">绕 Z 轴旋转</button>
+    <button class="btn-reset" onclick="resetRotation()">重置旋转</button>
+    <button class="btn-fly"   onclick="flyToModel()">飞入模型位置</button>
+    <button class="btn-toggle" onclick="toggleModel()">切换模型显隐</button>
+    <div id="angleInfo">
+      绕X轴：<span id="ax">0</span>°<br>
+      绕Y轴：<span id="ay">0</span>°<br>
+      绕Z轴：<span id="az">0</span>°
+    </div>
+  </div>
+
+  <script>
+    // ============ 1. 初始化 Viewer ============
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+        url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+      }),
+      homeButton: false,
+      sceneModePicker: false,
+      baseLayerPicker: false,
+      navigationHelpButton: false,
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+      vrButton: false
+    });
+
+    viewer.scene.debugShowFramesPerSecond = true;
+
+    // 初始相机位置
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(114.9, 30.5, 5000000)
+    });
+
+    // ============ 2. 加载 3DTiles 模型 ============
+    var tileset = viewer.scene.primitives.add(
+      new Cesium.Cesium3DTileset({
+        url: '见习题目/Tileset/tileset.json'
+      })
+    );
+
+    var originalMatrix = null;   // 保存初始模型矩阵
+    var anglex = 0, angley = 0, anglez = 0;
+
+    tileset.readyPromise.then(function () {
+      // 保存原始矩阵
+      originalMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
+
+      // 相机飞入模型位置
+      viewer.zoomTo(tileset);
+
+      console.log('3DTiles 模型加载成功！');
+      updateStatus('模型加载完成');
+    }).otherwise(function (error) {
+      console.error('模型加载失败：', error);
+      updateStatus('模型加载失败，请检查路径');
+    });
+
+    // ============ 3. 旋转函数 ============
+    function updateStatus(msg) {
+      // 状态在角度面板中体现
+    }
+
+    function updateAngles() {
+      document.getElementById('ax').textContent = anglex;
+      document.getElementById('ay').textContent = angley;
+      document.getElementById('az').textContent = anglez;
+    }
+
+    function applyRotation() {
+      if (!originalMatrix) return;
+
+      // 先绕 Z 轴 → 再绕 Y 轴 → 再绕 X 轴（外旋 ZYX 顺序）
+      var rotX = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(anglex));
+      var rotY = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(angley));
+      var rotZ = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(anglez));
+
+      var rotMat = new Cesium.Matrix3();
+      Cesium.Matrix3.multiply(rotZ, rotY, rotMat);
+      Cesium.Matrix3.multiply(rotMat, rotX, rotMat);
+
+      tileset.modelMatrix = Cesium.Matrix4.multiplyByMatrix3(
+        originalMatrix, rotMat, new Cesium.Matrix4()
+      );
+      updateAngles();
+    }
+
+    // 绕 X 轴旋转 1°
+    function rotateX() {
+      anglex += 1;
+      applyRotation();
+    }
+
+    // 绕 Y 轴旋转 1°
+    function rotateY() {
+      angley += 1;
+      applyRotation();
+    }
+
+    // 绕 Z 轴旋转 1°
+    function rotateZ() {
+      anglez += 1;
+      applyRotation();
+    }
+
+    // 重置旋转
+    function resetRotation() {
+      anglex = 0;
+      angley = 0;
+      anglez = 0;
+      if (originalMatrix) {
+        tileset.modelMatrix = Cesium.Matrix4.clone(originalMatrix);
+      }
+      updateAngles();
+    }
+
+    // 飞入模型位置
+    function flyToModel() {
+      viewer.zoomTo(tileset);
+    }
+
+    // 切换模型显隐
+    function toggleModel() {
+      tileset.show = !tileset.show;
+    }
+
+    console.log('实验2——3DTiles 模型旋转页面初始化完成！');
+  </script>
+</body>
+</html>
