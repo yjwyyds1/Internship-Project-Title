@@ -1,7 +1,10 @@
 node_modules/
 *.zip
+*.docx
+*.pdf
+*.txt
 见习题目/Cesium-1.40/
-temp_*.txt
-temp_*.xml
-temp_*.md
-unpacked_*/
+~$*
+.claude/
+见习题目/~WRL0005.tmp
+见习题目/~$*
